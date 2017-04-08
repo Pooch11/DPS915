@@ -22,7 +22,7 @@ sad/triste
 happy/content
 mad/furieux
 finished/fini
-
+fast/vite
 
 
 
