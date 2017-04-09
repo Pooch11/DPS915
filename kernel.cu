@@ -20,6 +20,8 @@
 #define Serial 0
 #define DEBUG 0
 #define CHECK if (errorStatus != cudaSuccess) {std::cout << errorStatus << std::endl;}
+
+
 typedef struct  {
 	int length;
 	char* text;
@@ -51,8 +53,9 @@ __device__ char * my_strcat(char *dest, const char *src) {
 	return dest;
 }
 
-//'blackbox' - some device function that would replace text given a position
+//'blackbox' - some device function made from someone smart that would replace text given a position
 __device__ void replace_char(char s, char replace , int posBeg, int posEnd) {
+	//taken a positon, we could replace the word we want character by character on device memory.
 			s = replace;
 		s++;
 }
@@ -77,6 +80,9 @@ __global__ void wordSearch(char *pszData, int dataLength, char *pszTarget, int t
 	}
 }
 
+
+
+
 void matchingCPU(char *T, int n, char *P, short m,bool *result)
 {
 int k; //keep track of string length
@@ -92,7 +98,9 @@ int k; //keep track of string length
 
 }
 
-__global__ void matchingGPU(const char Target[], const char *Pattern, const int textLen, const int pattLen, volatile bool *result)
+
+
+__global__ void matchingGPU(const char* Target, const char *Pattern, const int textLen, const int pattLen, volatile bool *result)
 {
 	extern __shared__ bool blockresults[];
 	unsigned int Idx = threadIdx.x +blockDim.x * blockIdx.x; // 1 * 1 +  Idx
@@ -201,7 +209,7 @@ void reportTime(const char* msg, std::chrono::steady_clock::duration span) {
 			int patternsize = 4 ;
 			char* h_word = new char[patternsize];
 
-			//DEBUG
+			//DEBUG - using this 'pattern' instead of loading it from file for sake of testing
 			strcpy (h_word, "the");
 
 
@@ -239,17 +247,37 @@ void reportTime(const char* msg, std::chrono::steady_clock::duration span) {
 			reportTime("Finding Words in file CPU took ", teCPU - tsCPU);
 #endif
 			matchcounter(numOfResults, h_result);
-
 			std::cout << "Matching on GPU: " << std::endl;
+			/* Streaming Attempt -- Returns false - may have to reconfigure stride to a size of char
+			char* streamtext = new char[dataLen];
+
+			const unsigned int NSTREAMS = 15;
+			cudaMallocHost((void**)&streamtext, NSTREAMS * dataLen);
+			cudaStream_t stream[NSTREAMS];
+
+			for (int i = 0; i < NSTREAMS; i++)
+				cudaStreamCreate(&stream[i]);
+
+			// define each stream as a copy, a launch and a copy
+			for (int i = 0; i < NSTREAMS; i++)
+				cudaMemcpyAsync(d_inputLine + i * patternsize, h_inputLine + i * patternsize, dataLen, cudaMemcpyHostToDevice, stream[i]);
+			for (int i = 0; i < NSTREAMS; i++)
+				matchingGPU<< <1, dataLen >> >(d_inputLine + i * patternsize, dataLen, d_word + i * patternsize, patternsize, d_result);
+			for (int i = 0; i < NSTREAMS; i++)
+				cudaMemcpyAsync(h_inputLine + i * patternsize, d_inputLine + i * patternsize, patternsize, cudaMemcpyDeviceToHost, stream[i]);
+
+			for (int i = 0; i < NSTREAMS; i++)
+				cudaStreamDestroy(stream[i]);
+				*/
 
 			//Grid declaration
-			int nb = (dataLen + ntpb - 1) / ntpb;
+			int nb = (dataLen + ntpb - 1) / ntpb; //should use data Length
 			int results = dataLen / 32 ;
 			dim3 dGrid(nb, 1 );
-			dim3 dBlock(nb, 1);
+			dim3 dBlock(nb, 1); 
 #if Timing tsGPU = std::chrono::steady_clock::now();
 #endif		
-
+			// More efficient to use max number of  threads for 1D
 			matchingGPU << < 1, 1024 >> > (d_inputLine, d_word, dataLen, patternsize, d_result);
 			cudaDeviceSynchronize();
 			CHECK
